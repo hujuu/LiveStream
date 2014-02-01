@@ -1,0 +1,159 @@
+ <!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>YouTubeを連続再生してみるサンプル</title>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js"></script>
+</head>
+<body>
+<script>
+var video_list = [];
+var index = 0;
+var init = true;
+var search = false;
+var api_index = 1;
+jQuery(function($) {
+    $("#search").click(function(){
+        $("#trac_" + index).css("color", "");
+        var query = $("#query").attr("value");
+        loadQuery(query);
+        var obj = { "query" : query };
+        history.pushState(obj, "", "?" + query);
+    });
+    $("#prev").click(function(){
+        prev();
+    });
+    $("#next").click(function(){
+        next();
+    });
+
+    var locationQuery = location.search;
+    if ( locationQuery ) {
+        locationQuery = locationQuery.replace(/^\?/,"");
+        locationQuery = decodeURI(locationQuery);
+        var obj = { "query" : locationQuery };
+        history.replaceState(obj, "", "?" + locationQuery);
+        loadQuery(locationQuery);
+    }
+});
+
+function onYouTubePlayerReady(playerId) {
+    document.getElementById(playerId).addEventListener("onStateChange", "onytplayerStateChange");
+}
+
+function onytplayerStateChange(newState) {
+    if (newState == 0) {
+        next();
+    }
+}
+
+function get_list(query) {
+    $.getJSON("http://gdata.youtube.com/feeds/api/videos?callback=?",
+        {
+            "q": query,
+            "alt": "jsonc",
+            "v" : 2,
+            "max-results":10,
+            "format": 5,
+            "orderby": "viewCount",
+            "start-index": api_index
+        },
+        function(rs) {
+            var queryReg = new RegExp($("#query").attr("value"),"i");
+            api_index += 10;
+            var rs_list = rs.data.items;
+
+            rs_list = rs_list.sort(function(a, b) {
+                return b.favoriteCount - a.favoriteCount;
+            });
+            $.each(rs_list, function() {
+                if (this.title.match(queryReg)) {
+                    video_list.push(this);
+                }
+            });
+            var html = "";
+            $.each(video_list, function(i, val){
+                html += "<span id=\"trac_" + i + "\">" + this.title + "</span><br />";
+            });
+            $("#list").html(html);
+            highlight();
+
+            if ( video_list.length == 0 ) {
+                $("#list").html("検索結果は0件でした。");
+                return;
+            }
+
+            // 最初だけswfobject作成
+            if (init) {
+                swfobject.embedSWF("http://www.youtube.com/v/" + video_list[index].id + "?enablejsapi=1&autoplay=1&playerapiid=player",
+                                  "video", "854", "480", "8", null, null, { allowScriptAccess: "always" }, { id: "player" });
+                init = false;
+                search = false;
+            }
+            // 検索の時は新しく再生する
+            if (search) {
+                search = false;
+                play();
+            }
+       }
+    );
+}
+
+function loadQuery(query) {
+    video_list = [];
+    index = 0;
+    api_index = 1;
+    search = true;
+    $("#query").attr("value", query);
+    get_list(query);
+}
+
+function next() {
+    if ( index >= video_list.length ) {
+        return;
+    }
+    ++index;
+    play();
+    if ( video_list.length < (index + 3) ) {
+        get_list( $("#query").attr("value") );
+    }
+}
+function prev() {
+    if ( index < 1 ) {
+        return;
+    }
+    --index;
+    play();
+}
+
+function play() {
+    document.getElementById("player").loadVideoById(video_list[index].id);
+    $("#info").html(video_list[index].title);
+    highlight();
+}
+function highlight() {
+    $("#list").children().css("color", "black");
+    $("#trac_" + index).css("color", "red");
+}
+
+window.addEventListener("popstate", function(e) {
+    if ( e.state ) {
+        loadQuery(e.state.query);
+    }
+});
+
+</script>
+<h1>YouTubeを連続再生してみるサンプル</h1>
+<div>
+<input type="text" id="query" value=""/>
+<input type="button" id="search" value="search" />
+|
+<input type="button"  id="prev" value="Prev" />
+<input type="button"  id="next" value="Next" />
+&nbsp;
+<span id="info"></span>
+</div>
+<div id="video"></div>
+<div id="list"></div>
+</body>
+</html>

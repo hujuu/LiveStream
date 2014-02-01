@@ -1,0 +1,234 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="./include/strm/youtubedataapi_v3_list/style.css" />
+    <title>YouTubeAPIv3サンプル | 再生リストの動画検索（認証なし）</title>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script>			
+        /* 開発キー
+            https://code.google.com/apis/console
+        */
+        var APIKEY="AIzaSyC3VBRnfUU9_qO1Gr1ARBO8BZLT-Sp6vFc";
+
+        function onJSClientLoad() {
+            dbg("★onJSClientLoad");
+            gapi.client.setApiKey(APIKEY);
+            gapi.client.load('youtube', 'v3', function(){
+                $.getYouTubeResults({
+                    query:"ハムスター hamster",
+                    order:"date",
+                    limit:50,
+                    maxResults:10
+                });
+            });
+        }
+        (function($){
+            $.getYouTubeResults=function(options){
+                dbg("★getYouTubeResults");
+                var opt=$.extend({
+                    query:"",
+                    type:"video",
+                    maxResults:10,
+                    limit:0,
+                    channelId:"",
+                    regionCode:"JP",        /* 国コード */
+                    order:"viewCount",        /* 検索順 */
+                    part:"id, snippet, status",
+                    fields:""
+                },options);
+
+                var pageToken="",s="";
+                var allcnt=0,j=0,totalResults=0,resultsPerPage=0,total=0;
+
+                var requestOptions = {
+                    maxResults:opt.maxResults,    //1ページ当たりの結果数最大値(0-50)デフォルト10
+                    q:opt.query, /* 検索キーワード */
+                    regionCode:opt.regionCode,
+                    type:opt.type,//video,channel,playlist
+                    order:opt.order,
+                    /*
+                    publishedAfter
+                    publishedBefore
+                    topicId
+                    videoCaption
+                    videoCategoryId
+                    videoDefinition
+                    videoDimension
+                    videoDuration
+                    videoEmbeddable
+                    videoLicense
+                    "relatedToVideoId:"0f1SLJEY6iY",//指定した動画の関連動画のみ検索対象とする
+                    videoSyndicated    youtube.com外で再生できる動画のみ検索
+                    channelId        チャンネル固有ID（ユーザー名ではない）を指定すると、そのチャンネル内での検索となる
+                    */
+                    "part":"id,snippet"
+                };
+                if(opt.fields!="") requestOptions.fields=opt.fields;
+                makeRequest();
+
+                /* APIリクエスト */
+                function makeRequest(){
+                    dbg("★makeRequest:"+pageToken);
+                    if(pageToken){
+                        requestOptions.pageToken=pageToken;
+                    }
+                    var request=gapi.client.request({
+                        mine:"",
+                        path:"/youtube/v3/search",
+                        params:requestOptions
+                    });
+                    request.execute(function(resp) {
+                        dbg(resp);
+                        if(resp.error){
+                            $("#message").html(resp.error.message);
+                        }else{
+                            output(resp,pageToken);
+                        }
+                    });
+                }
+                /* HTML出力 */
+                function output(resp,pageTokenFLG){
+                    pageToken=resp.nextPageToken;
+                    /* dbg("output");dbg("pageToken:"+pageToken); */
+                    if(pageTokenFLG==""){
+                        var pageInfo=resp.pageInfo;
+                        resultsPerPage=resp.pageInfo.resultsPerPage; /* APIレスポンスに含まれる結果の数 */
+                        totalResults=resp.pageInfo.totalResults; /* 結果セット内の結果の合計数 */
+                        if(opt.limit>0 && totalResults> opt.limit){
+                            totalResults=opt.limit;
+                        }
+                        total=Math.floor(totalResults/resultsPerPage);
+                        if(totalResults<=resultsPerPage){
+                            total=1;
+                        }else if(totalResults%resultsPerPage!=0){
+                            total++;
+                        }
+                        dbg("total:"+total+"/resultsPerPage:"+resultsPerPage+"/totalResults:"+totalResults);
+                        s+="<li>結果数最大値の指定:"+opt.maxResults+"</li>";
+                        s+="<li>結果セット内の結果合計数:"+pageInfo.totalResults+"</li>";
+                        s+="<li>1レスポンスに含まれる結果数:"+pageInfo.resultsPerPage+"</li>";
+                        s+="<li>取得数上限:"+((opt.limit==0)?"∞":opt.limit)+"</li>";
+                        s+="<li>リクエスト回数:"+total+"</li>";
+                        $("#results").append("<h2>Results</h2>"+s);
+                        s="";
+                        if(totalResults==0){
+                            $("#message").html("検索条件に一致するデータがありませんでした");
+                        }
+                    }
+                    itemOutput(resp.items);
+                    allcnt++;
+                    if(allcnt<total){
+                        makeRequest();
+                    }else{
+                        $("#results").append("<h2>Search Results</h2>"+s);
+                    }
+                }
+                function itemOutput(items){
+                    //dbg("allcnt:"+allcnt+"/j:"+j);
+                    $.each(items, function(i, item){
+                        if(j>=opt.limit) return;
+                        j=(allcnt*resultsPerPage)+i+1;
+                        if(item.id && item.snippet){
+                            s+="<dl>";
+                            /* id */
+                            var id=item.id.videoId;
+                            var kind=item.id.kind;
+                            var thumbnails_default="no thumbnails";
+                            var snippet=item.snippet;
+                            var title=(snippet.title)?snippet.title:"no title";
+                            var channelId=(snippet.channelId)?snippet.channelId:"no channelId";
+                            var channelTitle=(snippet.channelTitle)?snippet.channelTitle:"no channelTitle";
+                            var pubdatedAt=(snippet.publishedAt)?formatDate(snippet.publishedAt):"no publishedAt";
+                            var description=(snippet.description)?snippet.description:"no description";
+                            if(snippet.thumbnails){
+                                $.each(snippet.thumbnails, function(y, ytem){
+                                    //default, medium, height
+                                    if(y=="default"){
+                                        thumbnails_default=ytem.url;
+                                    }
+                                });
+                            }
+														
+                            s+="<dt>";
+                            s+="<a href='http://www.youtube.com/watch?v="+id+"'><img src='"+thumbnails_default+"'></a>";
+                            s+="</dt><dd>【"+j+"】";
+                            s+="<p>種類:"+kind+"</a></p>";
+                            s+="<p>動画タイトル（ID）:<a href='http://www.youtube.com/watch?v=" + id + "'>" + title + "（"+ id +"）</a></p>";
+                            s+="<p>動画が属するチャンネルのタイトル（ID）: <a href='http://www.youtube.com/channel/"+channelId+"'>"+channelTitle+"（"+channelId+"）</a></p>";
+                            s+="<p>動画の公開日: "+pubdatedAt+"</p>";
+                            s+="<p>動画の説明文："+description+"</p>";
+                            /*
+                            if(snippet.resourceId && snippet.resourceId.videoId){
+                                s+="<p>resourceId.videoId:<a href='http://www.youtube.com/watch?v="+snippet.resourceId.videoId+"'>"+snippet.resourceId.videoId+"</a></p>";
+                            }
+                            */
+                            s+="</dd></dl>";
+                        }
+                    });
+                }
+                return this;
+            }
+        })(jQuery);
+				
+        var formatDate=function(str){
+            var tmp=str.split("T");
+            var ymd=tmp[0].split("-");
+            var hms=tmp[1].split(":");
+            var sec=hms[2].split(".")[0];
+            var d=new Date(new Date(ymd[0], ymd[1]-1, ymd[2], hms[0], hms[1], sec).getTime()+(1000*60*60*9)); //+9h
+            var year=d.getFullYear();
+            var month=d.getMonth()+1;
+            var day=d.getDate();
+            var hour=(d.getHours()   < 10 ) ? '0'+d.getHours()   : d.getHours();
+            var min =(d.getMinutes() < 10 ) ? '0'+d.getMinutes() : d.getMinutes();
+            var sec =(d.getSeconds() < 10 ) ? '0'+d.getSeconds() : d.getSeconds();
+            return year+"/"+month+"/"+day+" "+hour+":"+min;//+":"+sec;
+        }
+        
+				var dbg=function(str){
+            try{
+                if(window.console && console.log){
+                    console.log(str);
+                }
+            }catch(err){
+                //alert("error:"+err);
+            }
+        }
+				
+            /* IFrame Player APIのコードを非同期にロード */
+            var tag = document.createElement('script');
+            tag.src = "//www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+            /* APIコードがダウンロードされた後で、ifraemとYouTubeプレーヤー要素を生成 */
+            var player;
+						
+            function onYouTubeIframeAPIReady() {
+                player = new YT.Player(
+                    'player', /* 動画プレーヤーを埋め込む要素ID */
+                    {
+                        width: '640',    /* 動画プレーヤーの幅 */
+                        height: '390',    /* 動画プレーヤーの高さ */
+                        videoId: "EqUmgAqIGKE;",    /* YouTube動画ID */
+                        events: {    /* イベント */
+                            "onReady": onPlayerReady    /* プレーヤの準備完了時 */
+                        }
+                    }
+                );
+            }
+            function onPlayerReady(event){
+                /* プレーヤの準備完了時に自動再生 */
+                event.target.playVideo();
+            }	
+				
+    </script>
+    <script src="https://apis.google.com/js/client.js?onload=onJSClientLoad"></script>
+</head>
+<body>
+    <h1>設置サンプル：[YouTube API(v3) - 動画検索（認証なし）</h1>
+    <p>    'ハムスター'または'hamster'がタイトルに含まれる動画を、新着順に上限50まで取得するサンプル。 取得制限数は、スクリプト側でかけてます。</p>
+		<div id="player"></div>
+    <div id="message"></div>
+    <div id="results"></div>
+</body>
+</html>
